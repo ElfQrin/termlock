@@ -1,13 +1,15 @@
 # TermLock (Terminal Lock)
-# r2017-01-27 fr2017-01-13
+# r2017-01-30 fr2017-01-13
 # by Valerio Capello - http://labs.geody.com/ - License: GPL v3.0
 
 trap "" 1 2 3 20 # Traps Signals and Interrupts: blocks Ctrl+C , Ctrl+\ , Ctrl+Z , Ctrl+D
 
-# 098f6bcd4621d373cade4e832627b4f6 # Hash for "test" (without quotes)
+# "$6$00000000$Ecw0YyyJ4sK4v4s7/V/HvstYmY48Hthq0T3M/Dr70frxMfGTUbP4llrgm2vTwJbQxGGbP2cDUlvl2QeO6tPwo0" # Hash for "test" (without quotes), generated with mkpasswd -m sha-512 --salt '00000000' 'test'
 # pwunlock=$1; # Pass the MD5 hash of the unlock password as a parameter from the command line
-pwunlock="098f6bcd4621d373cade4e832627b4f6"; # Set the MD5 hash of the unlock password (type echo -n "PASSWORD" | md5sum | sed "s/  -//g"; in the command line to get the hash of the password. You may want to delete the last command from the history after getting the hash.
-# pwunlock=echo -n "PASSWORD" | md5sum | sed "s/  -//g"; # Create MD5 hash from a clear text string (not recommended)
+# pwunlock='$6$00000000$Ecw0YyyJ4sK4v4s7/V/HvstYmY48Hthq0T3M/Dr70frxMfGTUbP4llrgm2vTwJbQxGGbP2cDUlvl2QeO6tPwo0'; # Set the hash of the unlock password. Use single quotes (''), not double quotes (""), to avoid '$' being interpreted as variables
+# pwunlock=`mkpasswd -m sha-512 --salt '00000000' 'test1'`; # Create a sha-512 hash from a clear text string (not recommended here within the script, as it leaves the password in cleartext)
+pwunlock=`getent shadow|grep "$(whoami)"|cut -f 2- -d ':'|cut -f 1 -d ':'`; # Get the hash type, salt and hashed password for the current user
+pwunlockhtyp=1; # hash type: 0: plain text (not recommended), 1: autodetect (recommended)
 alarmfail=0; # Play a sound for failed attempts (might not work on all shells/terminals): 0: No, 1: Yes
 tllogfailwarn=0; # Warn that failed attempts will be logged (if enabled)
 tllogfail=1; # Log failed attempts: 0: No, 1: Yes
@@ -18,6 +20,32 @@ tllogunlock=1; # Log unlocks: 0: No, 1: Yes
 tllogunlockfn="/var/log/termlock/termlock_access_`date '+%Y'`.log"; # Log file name for Unlocks (destination directory must exists and be writeable)
 tllogedt=1; # Add date and time to log entries: 0: No, 1: Yes
 tllogeip=0; # Add IP address to log entries: 0: No, 1: Yes
+
+if [ "$pwunlockhtyp" -eq 1 ]; then
+if [ "${pwunlock//[^$]}" = '$$$' ]; then
+pwhtyp=`echo -n "$pwunlock"|cut -f 2- -d ':'|cut -f 1 -d ':'|cut -f 2- -d '$'|cut -f 1 -d '$'`; # Get the hash type
+pwhslt=`echo -n "$pwunlock"|cut -f 2- -d ':'|cut -f 1 -d ':'|cut -f 2- -d '$'|cut -f 2- -d '$'|cut -f 1 -d '$'`; # Get the salt
+case "$pwhtyp" in
+1)
+pwhtypa='md5';
+;;
+5)
+pwhtypa='sha-256';
+;;
+6)
+pwhtypa='sha-512';
+;;
+*)
+pwhtypa='des'; # unimplemented
+;;
+esac
+fi
+else
+$pwunlockhtyp=0;
+pwhtypa='';
+fi
+
+# echo "Hash: $pwunlock";
 
 if [ $tlloglock -eq 1 ]; then
 if [ $tllogedt -eq 1 ]; then
@@ -32,6 +60,7 @@ ctip=""
 fi
 echo "$ctdt$ctip*** LOCK ***" >> $tlloglockfn
 fi
+
 clear
 while true
 do
@@ -45,10 +74,14 @@ fi
 echo -n "Enter Password: "
 # read pwin # Show typed password
 read -s pwin # Hide typed password
-pwinh=`echo -n "$pwin" | md5sum | sed "s/  -//g";`
+if [ "$pwunlockhtyp" -eq 1 ]; then
+pwinh=`mkpasswd -m $pwhtypa --salt "$pwhslt" "$pwin";`;
+else
+# pwinh=`echo -n "$pwin" | md5sum | sed 's/  -//g';`; # md5sum
+pwinh="$pwunlock";
+fi
 while true
 do
-# if [ "$pwin" = "$pwunlock" ] # Use only if passwords are not hashed (not recommended)
 if [ "$pwinh" = "$pwunlock" ]
 then
 # clear
@@ -79,7 +112,7 @@ break
 fi
 done
 done
-pwunlock=""; pwin=""; pwinh="" # The scope of these variables is local but better safe than sorry
+pwunlock=""; pwin=""; pwinh=""; pwhtyp=""; pwhtypa=""; pwhslt=""; # The scope of these variables is local but better safe than sorry
 if [ $tllogunlock -eq 1 ]; then
 if [ $tllogedt -eq 1 ]; then
 ctdt="`date '+[%F %T]'` "
