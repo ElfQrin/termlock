@@ -36,11 +36,13 @@ pwhtypa='sha-256';
 pwhtypa='sha-512';
 ;;
 *)
-pwhtypa='des'; # unimplemented
+$pwunlockhtyp=0;
+pwhtypa='';
 ;;
 esac
 fi
 else
+# It might be DES, which is not supported. Assume cleartext.
 $pwunlockhtyp=0;
 pwhtypa='';
 fi
